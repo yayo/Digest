@@ -100,6 +100,7 @@ int traversal(const wchar_t *d,FILE *f,bool r)
         x["SHA256"]=md();
         x["SHA512"]=md();
         x["RIPEMD160"]=md();
+        x["whirlpool"]=md();
         for(std::map<std::string,md>::iterator it=x.begin();it!=x.end();it++) init(it);
         const size_t block_size=128;
         unsigned char buf[block_size];

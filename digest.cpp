@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
   std::string s;
   bool r;
   desc.add_options()
-   ("help,h", "1.1.1.3")
+   ("help,h", "1.1.1.4")
    ("path,p",boost::program_options::value<boost::filesystem::path>(&p)->default_value("."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
@@ -118,9 +118,14 @@ int main(int argc, char *argv[])
          {off64_t readed;
           uLong crc=crc32(0L,Z_NULL,0);
           std::map<std::string,md> x;
+          x["MD4"]=md();
           x["MD5"]=md();
+          x["MDC2"]=md();
+          x["SHA"]=md();
           x["SHA1"]=md();
+          x["SHA224"]=md();
           x["SHA256"]=md();
+          x["SHA384"]=md();
           x["SHA512"]=md();
           x["RIPEMD160"]=md();
           x["whirlpool"]=md();

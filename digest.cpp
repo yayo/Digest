@@ -2,7 +2,19 @@
 
 g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -lcrypto -lz -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -o digest
 
+C:\MinGW32>g++ -std=c++11 -Wall -Wextra -O3 digest.cpp libeay32.dll libboost_prgram_options-mgw47-mt-1_51.a libboost_filesystem-mgw47-mt-1_51.a libboost_syste-mgw47-mt-1_51.a zlib1.dll
+
 */
+
+#ifdef __MINGW32__
+#define STATE_S _stati64
+#define STATE_F _wstati64
+#define OPEN _wopen
+#else
+#define STATE_S stat64
+#define STATE_F stat64
+#define OPEN open64
+#endif
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -77,8 +89,8 @@ int main(int argc, char *argv[])
     for (boost::filesystem::recursive_directory_iterator i(p),e; i!=e; i++)
      {if(boost::filesystem::is_directory(i->path())){}
       else if(boost::filesystem::is_regular_file(i->path()))
-       {struct stat64 s;
-        assert(0==stat64(i->path().c_str(),&s));
+       {struct STATE_S s;
+        assert(0==STATE_F(i->path().c_str(),&s));
         assert(S_ISREG(s.st_mode));
         std::cout<<i->path()<<"\t";
         assert(i->path().native().size()<=i->path().native().find_first_of('"'));
@@ -100,7 +112,7 @@ int main(int argc, char *argv[])
           unsigned char buf[block_size];
           int f;
           off64_t fsize;
-          assert(-1!=(f=open64(i->path().c_str(),O_RDONLY)));
+          assert(-1!=(f=OPEN(i->path().c_str(),O_RDONLY)));
           for(fsize=0;(readed=read(f,buf,block_size))==block_size;fsize+=block_size)
            {crc = crc32(crc, buf, block_size);
             for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) update(m,buf,block_size);

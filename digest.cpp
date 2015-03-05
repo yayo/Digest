@@ -30,6 +30,7 @@ g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-m
 #define STATE_S stat64
 #define STATE_F stat64
 #define OPEN open64
+#define O_BINARY 0
 #endif
 
 #include <sys/stat.h>
@@ -82,7 +83,7 @@ int main(int argc, char *argv[])
   std::string s;
   bool r;
   desc.add_options()
-   ("help,h", "1.1.1.2")
+   ("help,h", "1.1.1.3")
    ("path,p",boost::program_options::value<boost::filesystem::path>(&p)->default_value("."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
           unsigned char buf[block_size];
           int f;
           off64_t fsize;
-          assert(-1!=(f=OPEN(i->path().c_str(),O_RDONLY)));
+          assert(-1!=(f=OPEN(i->path().c_str(),O_RDONLY|O_BINARY)));
           for(fsize=0;(readed=read(f,buf,block_size))==block_size;fsize+=block_size)
            {crc = crc32(crc, buf, block_size);
             for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) update(m,buf,block_size);

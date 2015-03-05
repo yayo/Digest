@@ -1,14 +1,30 @@
 /*
 
-g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -lcrypto -lz -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -o digest
+g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -lz -lcrypto
 
-C:\MinGW32>g++ -std=c++11 -Wall -Wextra -O3 digest.cpp libeay32.dll libboost_prgram_options-mgw47-mt-1_51.a libboost_filesystem-mgw47-mt-1_51.a libboost_syste-mgw47-mt-1_51.a zlib1.dll
+MinGW64
+http://nuwen.net/files/mingw/mingw-12.2.exe
+http://slproweb.com/download/Win64OpenSSL-1_0_2.exe
+http://www.microsoft.com/downloads/details.aspx?familyid=bd2a6171-e2d6-4230-b809-9a8d7548c1b6
+g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system -lz libeay32.dll
+
+MinGW32
+http://jaist.dl.sourceforge.net/project/tdm-gcc/TDM-GCC%20Installer/Previous/1.1006.0/tdm-gcc-4.7.1-2.exe
+http://slproweb.com/download/Win32OpenSSL-1_0_2.exe
+http://www.microsoft.com/downloads/details.aspx?familyid=9B2DA534-3E03-4391-8A4D-074B9F2BC1BF
+https://srgb.googlecode.com/files/sdk_boost_151.7z
+http://liquidtelecom.dl.sourceforge.net/project/mingw/MinGW/Base/zlib/zlib-1.2.8/zlib-1.2.8-1-mingw32-dll.tar.lzma
+g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-mgw47-mt-1_51.a libboost_filesystem-mgw47-mt-1_51.a libboost_system-mgw47-mt-1_51.a zlib1.dll libeay32.dll
 
 */
 
 #ifdef __MINGW32__
 #define STATE_S _stati64
 #define STATE_F _wstati64
+#define OPEN _wopen
+#elif defined( __MINGW64__ )
+#define STATE_S stat64
+#define STATE_F _wstat64
 #define OPEN _wopen
 #else
 #define STATE_S stat64
@@ -66,7 +82,7 @@ int main(int argc, char *argv[])
   std::string s;
   bool r;
   desc.add_options()
-   ("help,h", "1.1.1.1")
+   ("help,h", "1.1.1.2")
    ("path,p",boost::program_options::value<boost::filesystem::path>(&p)->default_value("."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")

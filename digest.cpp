@@ -1,6 +1,6 @@
 /*
 
-g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -lcrypto
+g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -lboost_regex -lcrypto
 
 MinGW64
 http://nuwen.net/files/mingw/mingw-12.2.exe
@@ -42,41 +42,29 @@ g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-m
 #include <boost/program_options.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/format.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/join.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/classification.hpp>
 
 struct md
- {const EVP_MD *md;
-  EVP_MD_CTX *ctx;
+ {const EVP_MD *m;
+  EVP_MD_CTX *c;
   unsigned char r[EVP_MAX_MD_SIZE];
   unsigned int size;
+  md(const EVP_MD *m,EVP_MD_CTX *c):m(m),c(c){}; 
+  //~md(){EVP_MD_CTX_destroy(c);};
  };
  
-void init(std::map<std::string,md>::iterator x)
- {x->second.md=NULL;
-  assert(NULL!=(x->second.md=EVP_get_digestbyname(x->first.c_str())));
-  x->second.ctx=NULL;
-  assert(NULL!=(x->second.ctx=EVP_MD_CTX_create()));
-  assert(1==EVP_DigestInit_ex(x->second.ctx, x->second.md, NULL));
- }
-
-void update(std::map<std::string,md>::iterator x,unsigned char *buf,const size_t size)
- {assert(EVP_DigestUpdate(x->second.ctx, buf, size)==1);
- }
-
-void final(std::map<std::string,md>::iterator x)
- {assert(EVP_DigestFinal_ex(x->second.ctx, x->second.r,&(x->second.size))==1);
-  EVP_MD_CTX_destroy(x->second.ctx);
-  x->second.ctx=NULL;
- } 
-
 void print(std::map<std::string,md>::iterator x)
- {std::cout<<EVP_MD_name(x->second.md)<<':';
+ {std::cout<<x->first<<':';
   for(unsigned int i=0;i<x->second.size;i++)
    {std::cout<<boost::format("%02x")%((static_cast<short>(x->second.r[i])&0xFF));
    }
   std::cout<<"\t";
  } 
 
-void digest(const boost::filesystem::path &p,const bool &c)
+void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,md> &x)
  {struct STATE_S s;
   assert(0==STATE_F(p.c_str(),&s));
   assert(S_ISREG(s.st_mode));
@@ -89,19 +77,7 @@ void digest(const boost::filesystem::path &p,const bool &c)
    {off64_t readed;
     boost::crc_32_type crc32_ieee;
     boost::crc_optimal<64, 0x42F0E1EBA9EA3693ULL,0xFFFFFFFFFFFFFFFFULL,0xFFFFFFFFFFFFFFFFULL,false,false> crc64_ecma_182 ;
-    std::map<std::string,md> x;
-    x["MD4"]=md();
-    x["MD5"]=md();
-    x["MDC2"]=md();
-    x["SHA"]=md();
-    x["SHA1"]=md();
-    x["SHA224"]=md();
-    x["SHA256"]=md();
-    x["SHA384"]=md();
-    x["SHA512"]=md();
-    x["RIPEMD160"]=md();
-    x["whirlpool"]=md();
-    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) init(m);
+    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) assert(1==EVP_DigestInit_ex(m->second.c,m->second.m,NULL));
     const size_t block_size=128;
     unsigned char buf[block_size];
     int f;
@@ -110,14 +86,17 @@ void digest(const boost::filesystem::path &p,const bool &c)
     for(fsize=0;(readed=read(f,buf,block_size))==block_size;fsize+=block_size)
      {crc32_ieee.process_bytes(buf,block_size);
       crc64_ecma_182.process_bytes(buf,block_size);
-      for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) update(m,buf,block_size);
+      for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) assert(EVP_DigestUpdate(m->second.c,buf,block_size)==1);
      }
     close(f);
     assert(fsize+readed==s.st_size);
     crc32_ieee.process_bytes(buf,readed);
     crc64_ecma_182.process_bytes(buf,readed);
-    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) update(m,buf,readed);
-    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) final(m);
+    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) assert(EVP_DigestUpdate(m->second.c,buf,readed)==1);
+    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++)
+     {assert(EVP_DigestFinal_ex(m->second.c,m->second.r,&(m->second.size))==1);
+      EVP_MD_CTX_cleanup(m->second.c);
+     }
     std::cout<<"CRC32:"<<boost::format("%08lX")%crc32_ieee.checksum()<<"\t";
     std::cout<<"CRC64:"<<boost::format("%016lX")%crc64_ecma_182.checksum()<<"\t";
     for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) print(m);
@@ -125,21 +104,40 @@ void digest(const boost::filesystem::path &p,const bool &c)
   std::cout<<"\n";
  }
 
+void list_available_digest(const EVP_MD *m, const char *from, const char*, void *arg)
+{std::set<std::string> *MDs=(std::set<std::string>*)arg;
+ if(m)
+  {const char *s=OBJ_nid2ln(EVP_MD_type(m));
+   if(!strcmp(from,s))
+    {if(!(EVP_MD_flags(m) & EVP_MD_FLAG_PKEY_DIGEST))
+      {static const boost::regex e("[A-Za-z]{1,}[0-9]{0,}");
+       s=EVP_MD_name(m);
+       assert(boost::regex_match(s,e));
+       assert(MDs->end()==MDs->find(s));
+       MDs->insert(s);
+      }
+    }
+  }
+}
+
 int main(int argc, char *argv[])
  {boost::program_options::options_description desc;
   boost::filesystem::path p;
   std::string o;
   bool c;
-  std::string s;
   bool r;
+  std::set<std::string> MDs;
+  OpenSSL_add_all_digests();
+  EVP_MD_do_all(list_available_digest,&MDs);
+  std::string s;
   desc.add_options()
-   ("help,h", "1.1.1.6")
+   ("help,h", "1.1.1.7")
    ("path,p",boost::program_options::value<boost::filesystem::path>(&p)->default_value("."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
+   ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
-   //("digests,s", boost::program_options::value<std::string>(&s)->default_value("crc32,md5,sha1,sha256,sha512,ripemd160,whirlpool"),"Digests to be selected")
-   ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file");
-
+   ("digests,s", boost::program_options::value<std::string>(&s)->default_value(boost::algorithm::join(MDs,",")),"Digests to be selected");
+  MDs.clear();
   boost::program_options::variables_map vm;
   boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
   boost::program_options::notify(vm);
@@ -152,12 +150,21 @@ int main(int argc, char *argv[])
     if("-"!=o)
      {assert(freopen(o.c_str(),"w",stdout));
      }
-    OpenSSL_add_all_digests();
-    if(boost::filesystem::is_regular_file(p)) digest(p,c);
+    std::map<std::string,md> x;
+    if(c&&!s.empty())
+     {for(boost::split_iterator<std::string::iterator> i=boost::make_split_iterator(s,boost::algorithm::token_finder(boost::is_any_of(", "),boost::token_compress_on));i!=boost::split_iterator<std::string::iterator>();i++)
+       {const EVP_MD *m=NULL;
+        assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
+        EVP_MD_CTX *c=NULL;
+        assert(NULL!=(c=EVP_MD_CTX_create()));
+        x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
+       }
+     }
+    if(boost::filesystem::is_regular_file(p)) digest(p,c,x);
     else
      {for (boost::filesystem::recursive_directory_iterator i(p),e; i!=e; i++)
        {if(boost::filesystem::is_directory(i->path())){}
-        else if(boost::filesystem::is_regular_file(i->path())) digest(i->path(),c);
+        else if(boost::filesystem::is_regular_file(i->path())) digest(i->path(),c,x);
         else
          {if(r)
            {std::map<boost::filesystem::file_type,std::string> s=

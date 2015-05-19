@@ -122,7 +122,7 @@ void list_available_digest(const EVP_MD *m, const char *from, const char*, void 
 
 int main(int argc, char *argv[])
  {boost::program_options::options_description desc;
-  boost::filesystem::path p;
+  std::vector<boost::filesystem::path> paths;
   std::string o;
   bool c;
   bool r;
@@ -131,8 +131,8 @@ int main(int argc, char *argv[])
   EVP_MD_do_all(list_available_digest,&MDs);
   std::string s;
   desc.add_options()
-   ("help,h", "1.1.1.7")
-   ("path,p",boost::program_options::value<boost::filesystem::path>(&p)->default_value("."),"Where to Traversal")
+   ("help,h", "1.1.1.8")
+   ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
@@ -146,43 +146,46 @@ int main(int argc, char *argv[])
     return(1);
    }
   else
-   {p=boost::filesystem::canonical(p);
-    if("-"!=o)
-     {assert(freopen(o.c_str(),"w",stdout));
-     }
-    std::map<std::string,md> x;
-    if(c&&!s.empty())
-     {for(boost::split_iterator<std::string::iterator> i=boost::make_split_iterator(s,boost::algorithm::token_finder(boost::is_any_of(", "),boost::token_compress_on));i!=boost::split_iterator<std::string::iterator>();i++)
-       {const EVP_MD *m=NULL;
-        assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
-        EVP_MD_CTX *c=NULL;
-        assert(NULL!=(c=EVP_MD_CTX_create()));
-        x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
+   {std::set<boost::filesystem::path> paths1;
+    for(std::vector<boost::filesystem::path>::const_iterator p=paths.begin();p!=paths.end();p++) paths1.insert(boost::filesystem::canonical(*p));
+    for(std::set<boost::filesystem::path>::const_iterator p=paths1.begin();p!=paths1.end();p++)
+     {if("-"!=o)
+       {assert(freopen(o.c_str(),"w",stdout));
        }
-     }
-    if(boost::filesystem::is_regular_file(p)) digest(p,c,x);
-    else
-     {for (boost::filesystem::recursive_directory_iterator i(p),e; i!=e; i++)
-       {if(boost::filesystem::is_directory(i->path())){}
-        else if(boost::filesystem::is_regular_file(i->path())) digest(i->path(),c,x);
-        else
-         {if(r)
-           {std::map<boost::filesystem::file_type,std::string> s=
-             {{boost::filesystem::status_unknown,"status_unknown"},
-              {boost::filesystem::file_not_found,"file_not_found"},
-              {boost::filesystem::regular_file,"regular_file"},
-              {boost::filesystem::directory_file,"directory_file"},
-              {boost::filesystem::symlink_file,"symlink_file"},
-              {boost::filesystem::block_file,"block_file"},
-              {boost::filesystem::character_file,"character_file"},
-              {boost::filesystem::fifo_file,"fifo_file"},
-              {boost::filesystem::socket_file,"socket_file"},
-              {boost::filesystem::reparse_file,"reparse_file"},
-              {boost::filesystem::type_unknown,"type_unknown"},
-              {boost::filesystem::_detail_directory_symlink,"_detail_directory_symlink"}
-             };
-            std::cerr<<"NOT a regular file: "<<i->path()<<" : file_type="<<s[boost::filesystem::status(i->path()).type()]<<std::endl;
-            assert(boost::filesystem::is_regular_file(i->path()));
+      std::map<std::string,md> x;
+      if(c&&!s.empty())
+       {for(boost::split_iterator<std::string::iterator> i=boost::make_split_iterator(s,boost::algorithm::token_finder(boost::is_any_of(", "),boost::token_compress_on));i!=boost::split_iterator<std::string::iterator>();i++)
+         {const EVP_MD *m=NULL;
+          assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
+          EVP_MD_CTX *c=NULL;
+          assert(NULL!=(c=EVP_MD_CTX_create()));
+          x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
+         }
+       }
+      if(boost::filesystem::is_regular_file(*p)) digest(*p,c,x);
+      else
+       {for (boost::filesystem::recursive_directory_iterator i(*p),e; i!=e; i++)
+         {if(boost::filesystem::is_directory(i->path())){}
+          else if(boost::filesystem::is_regular_file(i->path())) digest(i->path(),c,x);
+          else
+           {if(r)
+             {std::map<boost::filesystem::file_type,std::string> s=
+               {{boost::filesystem::status_unknown,"status_unknown"},
+                {boost::filesystem::file_not_found,"file_not_found"},
+                {boost::filesystem::regular_file,"regular_file"},
+                {boost::filesystem::directory_file,"directory_file"},
+                {boost::filesystem::symlink_file,"symlink_file"},
+                {boost::filesystem::block_file,"block_file"},
+                {boost::filesystem::character_file,"character_file"},
+                {boost::filesystem::fifo_file,"fifo_file"},
+                {boost::filesystem::socket_file,"socket_file"},
+                {boost::filesystem::reparse_file,"reparse_file"},
+                {boost::filesystem::type_unknown,"type_unknown"},
+                {boost::filesystem::_detail_directory_symlink,"_detail_directory_symlink"}
+               };
+              std::cerr<<"NOT a regular file: "<<i->path()<<" : file_type="<<s[boost::filesystem::status(i->path()).type()]<<std::endl;
+              assert(boost::filesystem::is_regular_file(i->path()));
+             }
            }
          }
        }

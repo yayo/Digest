@@ -70,9 +70,8 @@ void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,
   assert(S_ISREG(s.st_mode));
   std::cout<<p<<"\t";
   assert(p.native().size()<p.native().find_first_of('"'));
-  std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_mtime))<<"\t";
-  std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_ctime))<<"\t";
-  std::cout<<s.st_size<<"\t"<<std::flush;
+  std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_mtime))<<"\t"<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_ctime))<<"\t"<<s.st_size<<"\t"<<std::flush;;
+  /* std::cout<<major(s.st_dev)<<"_"<<minor(s.st_dev)<<"_"<<s.st_ino<<"\t"<<s.st_nlink<<"\t"<<std::flush; */
   if(c)
    {off64_t readed;
     boost::crc_32_type crc32_ieee;
@@ -131,15 +130,17 @@ int main(int argc, char *argv[])
   EVP_MD_do_all(list_available_digest,&MDs);
   std::string s;
   desc.add_options()
-   ("help,h", "1.1.1.8")
+   ("help,h", "1.1.1.9")
    ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
    ("digests,s", boost::program_options::value<std::string>(&s)->default_value(boost::algorithm::join(MDs,",")),"Digests to be selected");
   MDs.clear();
+  boost::program_options::positional_options_description pd;
+  pd.add("path",-1);
   boost::program_options::variables_map vm;
-  boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+  boost::program_options::store(boost::program_options::command_line_parser(argc,argv).options(desc).positional(pd).run(),vm);
   boost::program_options::notify(vm);
   if(vm.count("help"))
    {std::cerr<<desc<<"\n";

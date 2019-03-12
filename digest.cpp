@@ -37,6 +37,7 @@ g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-m
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <openssl/evp.h>
+#include <boost/assert.hpp>
 #include <boost/crc.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -53,7 +54,7 @@ struct md
   unsigned char r[EVP_MAX_MD_SIZE];
   unsigned int size;
   md(const EVP_MD *m,EVP_MD_CTX *c):m(m),c(c){}; 
-  //~md(){EVP_MD_CTX_destroy(c);};
+  //~md(){EVP_MD_CTX_free(c);}; // Segmentation fault
  };
  
 void print(std::map<std::string,md>::iterator x)
@@ -76,7 +77,10 @@ void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,
    {off64_t readed;
     boost::crc_32_type crc32_ieee;
     boost::crc_optimal<64, 0x42F0E1EBA9EA3693ULL,0xFFFFFFFFFFFFFFFFULL,0xFFFFFFFFFFFFFFFFULL,false,false> crc64_ecma_182 ;
-    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) assert(1==EVP_DigestInit_ex(m->second.c,m->second.m,NULL));
+    for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++)
+     {assert(1==EVP_MD_CTX_reset(m->second.c));
+      assert(1==EVP_DigestInit_ex(m->second.c,m->second.m,NULL));
+     }
     const size_t block_size=128;
     unsigned char buf[block_size];
     int f;
@@ -94,7 +98,7 @@ void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,
     for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++) assert(EVP_DigestUpdate(m->second.c,buf,readed)==1);
     for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++)
      {assert(EVP_DigestFinal_ex(m->second.c,m->second.r,&(m->second.size))==1);
-      EVP_MD_CTX_cleanup(m->second.c);
+      //EVP_MD_CTX_free(m->second.c);
      }
     std::cout<<"CRC32:"<<boost::format("%08lX")%crc32_ieee.checksum()<<"\t";
     std::cout<<"CRC64:"<<boost::format("%016lX")%crc64_ecma_182.checksum()<<"\t";
@@ -106,14 +110,24 @@ void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,
 void list_available_digest(const EVP_MD *m, const char *from, const char*, void *arg)
 {std::set<std::string> *MDs=(std::set<std::string>*)arg;
  if(m)
-  {const char *s=OBJ_nid2ln(EVP_MD_type(m));
-   if(!strcmp(from,s))
-    {if(!(EVP_MD_flags(m) & EVP_MD_FLAG_PKEY_DIGEST))
-      {static const boost::regex e("[A-Za-z]{1,}[0-9]{0,}");
-       s=EVP_MD_name(m);
-       assert(boost::regex_match(s,e));
-       assert(MDs->end()==MDs->find(s));
+  {static const std::set<std::string> ignore=
+    {"md5-sha1",
+     "blake2s256",
+     "blake2b512",
+     "sha512-224",
+     "sha512-256"
+    };
+   if(ignore.end()==ignore.find(from))
+    {static const boost::regex e("(?:SM3|SHA512|SHA384|SHA224|MD4|RIPEMD160|SHA256|SHAKE128|whirlpool|SHA3-256|SHAKE256|MDC2|SHA3-224|SHA3-512|SHA3-384|MD5|SHA1)");
+     const char *s=EVP_MD_name(m);
+     if(boost::regex_match(s,e))
+      {assert(MDs->end()==MDs->find(s));
+       assert(0==strcasecmp(from,s));
        MDs->insert(s);
+      }
+     else
+      {std::cerr<<"UnKnown: "<<s<<'\n';
+       std::abort();
       }
     }
   }
@@ -159,7 +173,7 @@ int main(int argc, char *argv[])
          {const EVP_MD *m=NULL;
           assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
           EVP_MD_CTX *c=NULL;
-          assert(NULL!=(c=EVP_MD_CTX_create()));
+          assert(NULL!=(c=EVP_MD_CTX_new()));
           x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
          }
        }

@@ -36,6 +36,7 @@ g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-m
 
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <boost/assert.hpp>
 #include <boost/crc.hpp>
@@ -79,7 +80,10 @@ void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,
     boost::crc_optimal<64, 0x42F0E1EBA9EA3693ULL,0xFFFFFFFFFFFFFFFFULL,0xFFFFFFFFFFFFFFFFULL,false,false> crc64_ecma_182 ;
     for(std::map<std::string,md>::iterator m=x.begin();m!=x.end();m++)
      {assert(1==EVP_MD_CTX_reset(m->second.c));
-      assert(1==EVP_DigestInit_ex(m->second.c,m->second.m,NULL));
+      if(1!=EVP_DigestInit_ex(m->second.c,m->second.m,NULL))
+       {std::cerr<<ERR_error_string(ERR_get_error(),NULL)<<" : "<<EVP_MD_name(m->second.m)<<std::endl;
+        std::abort();
+       }
      }
     const size_t block_size=128;
     unsigned char buf[block_size];
@@ -144,7 +148,7 @@ int main(int argc, char *argv[])
   EVP_MD_do_all(list_available_digest,&MDs);
   std::string s;
   desc.add_options()
-   ("help,h", "1.1.1.9")
+   ("help,h", "1.1.2.1")
    ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
@@ -186,6 +190,7 @@ int main(int argc, char *argv[])
            {if(r)
              {std::map<boost::filesystem::file_type,std::string> s=
                {{boost::filesystem::status_unknown,"status_unknown"},
+                {boost::filesystem::status_error,"status_error"},
                 {boost::filesystem::file_not_found,"file_not_found"},
                 {boost::filesystem::regular_file,"regular_file"},
                 {boost::filesystem::directory_file,"directory_file"},
@@ -195,8 +200,7 @@ int main(int argc, char *argv[])
                 {boost::filesystem::fifo_file,"fifo_file"},
                 {boost::filesystem::socket_file,"socket_file"},
                 {boost::filesystem::reparse_file,"reparse_file"},
-                {boost::filesystem::type_unknown,"type_unknown"},
-                {boost::filesystem::_detail_directory_symlink,"_detail_directory_symlink"}
+                {boost::filesystem::type_unknown,"type_unknown"}
                };
               std::cerr<<"NOT a regular file: "<<i->path()<<" : file_type="<<s[boost::filesystem::status(i->path()).type()]<<std::endl;
               assert(boost::filesystem::is_regular_file(i->path()));

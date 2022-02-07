@@ -66,12 +66,17 @@ void print(std::map<std::string,md>::iterator x)
   std::cout<<"\t";
  } 
 
-void digest(const boost::filesystem::path &p,const bool &c,std::map<std::string,md> &x)
+void digest(const std::string &b,const boost::filesystem::path &p,const bool &c,std::map<std::string,md> &x)
  {struct STATE_S s;
   assert(0==STATE_F(p.c_str(),&s));
   assert(S_ISREG(s.st_mode));
-  std::cout<<p<<"\t";
-  assert(p.native().size()<p.native().find_first_of('"'));
+  std::string o(p.generic_string());
+  assert(0==o.compare(0,b.size(),b));
+  o.erase(0,b.size());
+  assert(1<=o.size());
+  std::cout<<o<<"\t";
+  assert(o.size()<o.find_first_of('\t'));
+  assert(o.size()<o.find_first_of('\n'));
   std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_mtime))<<"\t"<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_ctime))<<"\t"<<s.st_size<<"\t"<<std::flush;;
   /* std::cout<<major(s.st_dev)<<"_"<<minor(s.st_dev)<<"_"<<s.st_ino<<"\t"<<s.st_nlink<<"\t"<<std::flush; */
   if(c)
@@ -140,6 +145,7 @@ void list_available_digest(const EVP_MD *m, const char *from, const char*, void 
 int main(int argc, char *argv[])
  {boost::program_options::options_description desc;
   std::vector<boost::filesystem::path> paths;
+  bool b;
   std::string o;
   bool c;
   bool r;
@@ -150,6 +156,7 @@ int main(int argc, char *argv[])
   desc.add_options()
    ("help,h", "1.1.2.1")
    ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
+   ("basename,b", boost::program_options::value<bool>(&b)->default_value(true),"Trim prefix path")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
@@ -181,11 +188,21 @@ int main(int argc, char *argv[])
           x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
          }
        }
-      if(boost::filesystem::is_regular_file(*p)) digest(*p,c,x);
+      std::string n("") ;
+      if(b)
+       {if(boost::filesystem::is_directory(*p))
+         {n=p->generic_string();
+         }
+        else if(boost::filesystem::is_regular_file(*p))
+         {n=p->parent_path().generic_string();
+         }
+        n+='/';
+       }
+      if(boost::filesystem::is_regular_file(*p)) digest(n,*p,c,x);
       else
        {for (boost::filesystem::recursive_directory_iterator i(*p),e; i!=e; i++)
          {if(boost::filesystem::is_directory(i->path())){}
-          else if(boost::filesystem::is_regular_file(i->path())) digest(i->path(),c,x);
+          else if(boost::filesystem::is_regular_file(i->path())) digest(n,i->path(),c,x);
           else
            {if(r)
              {std::map<boost::filesystem::file_type,std::string> s=

@@ -35,6 +35,7 @@ g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-m
 #endif
 
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <fcntl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -66,19 +67,25 @@ void print(std::map<std::string,md>::iterator x)
   std::cout<<"\t";
  } 
 
-void digest(const std::string &b,const boost::filesystem::path &p,const bool &c,std::map<std::string,md> &x)
+void digest(const bool m[6],const std::string &b,const boost::filesystem::path &p,const bool &c,std::map<std::string,md> &x)
  {struct STATE_S s;
   assert(0==STATE_F(p.c_str(),&s));
   assert(S_ISREG(s.st_mode));
-  std::string o(p.generic_string());
-  assert(0==o.compare(0,b.size(),b));
-  o.erase(0,b.size());
-  assert(1<=o.size());
-  std::cout<<o<<"\t";
-  assert(o.size()<o.find_first_of('\t'));
-  assert(o.size()<o.find_first_of('\n'));
-  std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_mtime))<<"\t"<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_ctime))<<"\t"<<s.st_size<<"\t"<<std::flush;;
-  /* std::cout<<major(s.st_dev)<<"_"<<minor(s.st_dev)<<"_"<<s.st_ino<<"\t"<<s.st_nlink<<"\t"<<std::flush; */
+  if(m[0])
+   {std::string o(p.generic_string());
+    assert(0==o.compare(0,b.size(),b));
+    o.erase(0,b.size());
+    assert(1<=o.size());
+    std::cout<<o<<"\t";
+    assert(o.size()<o.find_first_of('\t'));
+    assert(o.size()<o.find_first_of('\n'));
+   }
+  if(m[1]) std::cout<<major(s.st_dev)<<"_"<<minor(s.st_dev)<<"_"<<s.st_ino<<"\t";
+  if(m[2]) std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_mtime))<<"\t";
+  if(m[3]) std::cout<<boost::posix_time::to_iso_string(boost::posix_time::from_time_t(s.st_ctime))<<"\t";
+  if(m[4]) std::cout<<s.st_nlink<<"\t";
+  if(m[5]) std::cout<<s.st_size<<"\t";
+  std::cout<<std::flush;
   if(c)
    {off64_t readed;
     boost::crc_32_type crc32_ieee;
@@ -146,6 +153,8 @@ int main(int argc, char *argv[])
  {boost::program_options::options_description desc;
   std::vector<boost::filesystem::path> paths;
   bool b;
+  bool m[6];
+  std::string m0;
   std::string o;
   bool c;
   bool r;
@@ -157,6 +166,7 @@ int main(int argc, char *argv[])
    ("help,h", "1.1.2.1")
    ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
    ("basename,b", boost::program_options::value<bool>(&b)->default_value(true),"Trim prefix path")
+   ("mask,m", boost::program_options::value<std::string>(&m0)->default_value(""),"Mask Output: (n)ame,(d)evice,(m)time,(c)time,(l)inks,(s)ize")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,r", boost::program_options::value<bool>(&r)->default_value(true),"Exception of non-regular_file")
    ("content,c", boost::program_options::value<bool>(&c)->default_value(false),"Calculate file digest")
@@ -172,23 +182,29 @@ int main(int argc, char *argv[])
     return(1);
    }
   else
-   {std::set<boost::filesystem::path> paths1;
+   {if("-"!=o)
+     {assert(freopen(o.c_str(),"w",stdout));
+     }
+    m[0]=(m0.size()<=m0.find_first_of('n'));
+    m[1]=(m0.size()<=m0.find_first_of('d'));
+    m[2]=(m0.size()<=m0.find_first_of('m'));
+    m[3]=(m0.size()<=m0.find_first_of('c'));
+    m[4]=(m0.size()<=m0.find_first_of('l'));
+    m[5]=(m0.size()<=m0.find_first_of('s'));
+    std::map<std::string,md> x;
+    if(c&&!s.empty())
+     {for(boost::split_iterator<std::string::iterator> i=boost::make_split_iterator(s,boost::algorithm::token_finder(boost::is_any_of(", "),boost::token_compress_on));i!=boost::split_iterator<std::string::iterator>();i++)
+       {const EVP_MD *m=NULL;
+        assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
+        EVP_MD_CTX *c=NULL;
+        assert(NULL!=(c=EVP_MD_CTX_new()));
+        x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
+       }
+     }
+    std::set<boost::filesystem::path> paths1;
     for(std::vector<boost::filesystem::path>::const_iterator p=paths.begin();p!=paths.end();p++) paths1.insert(boost::filesystem::canonical(*p));
     for(std::set<boost::filesystem::path>::const_iterator p=paths1.begin();p!=paths1.end();p++)
-     {if("-"!=o)
-       {assert(freopen(o.c_str(),"w",stdout));
-       }
-      std::map<std::string,md> x;
-      if(c&&!s.empty())
-       {for(boost::split_iterator<std::string::iterator> i=boost::make_split_iterator(s,boost::algorithm::token_finder(boost::is_any_of(", "),boost::token_compress_on));i!=boost::split_iterator<std::string::iterator>();i++)
-         {const EVP_MD *m=NULL;
-          assert(NULL!=(m=EVP_get_digestbyname(boost::copy_range<std::string>(*i).c_str())));
-          EVP_MD_CTX *c=NULL;
-          assert(NULL!=(c=EVP_MD_CTX_new()));
-          x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
-         }
-       }
-      std::string n("") ;
+     {std::string n("") ;
       if(b)
        {if(boost::filesystem::is_directory(*p))
          {n=p->generic_string();
@@ -198,11 +214,11 @@ int main(int argc, char *argv[])
          }
         n+='/';
        }
-      if(boost::filesystem::is_regular_file(*p)) digest(n,*p,c,x);
+      if(boost::filesystem::is_regular_file(*p)) digest(m,n,*p,c,x);
       else
        {for (boost::filesystem::recursive_directory_iterator i(*p),e; i!=e; i++)
          {if(boost::filesystem::is_directory(i->path())){}
-          else if(boost::filesystem::is_regular_file(i->path())) digest(n,i->path(),c,x);
+          else if(boost::filesystem::is_regular_file(i->path())) digest(m,n,i->path(),c,x);
           else
            {if(r)
              {std::map<boost::filesystem::file_type,std::string> s=

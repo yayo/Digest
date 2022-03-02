@@ -1,19 +1,19 @@
 /*
 
-g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -lboost_regex -lcrypto -llzma
+g++ -std=c++11 -Wall -Wextra -flto -O3 digest.cpp -Wl,--dynamic-linker=/lib/ld.so -o digest -lboost_program_options -lboost_filesystem -lboost_system -lboost_date_time -lboost_regex -lcrypto -llzma
 
 MinGW64
 http://nuwen.net/files/mingw/mingw-12.2.exe
 http://slproweb.com/download/Win64OpenSSL-1_0_2.exe
 http://www.microsoft.com/downloads/details.aspx?familyid=bd2a6171-e2d6-4230-b809-9a8d7548c1b6
-g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system libeay32.dll
+g++ -std=c++11 -Wall -Wextra -flto -O3 digest.cpp -o digest -lboost_program_options -lboost_filesystem -lboost_system libeay32.dll
 
 MinGW32
 http://jaist.dl.sourceforge.net/project/tdm-gcc/TDM-GCC%20Installer/Previous/1.1006.0/tdm-gcc-4.7.1-2.exe
 http://slproweb.com/download/Win32OpenSSL-1_0_2.exe
 http://www.microsoft.com/downloads/details.aspx?familyid=9B2DA534-3E03-4391-8A4D-074B9F2BC1BF
 https://srgb.googlecode.com/files/sdk_boost_151.7z
-g++ -std=c++11 -Wall -Wextra -O3 digest.cpp -o digest libboost_program_options-mgw47-mt-1_51.a libboost_filesystem-mgw47-mt-1_51.a libboost_system-mgw47-mt-1_51.a libeay32.dll
+g++ -std=c++11 -Wall -Wextra -flto -O3 digest.cpp -o digest libboost_program_options-mgw47-mt-1_51.a libboost_filesystem-mgw47-mt-1_51.a libboost_system-mgw47-mt-1_51.a libeay32.dll
 
 # echo $(($(cat File | awk 'BEGIN{size=0}{size+=$4}END{print size}')*100/$(du -sb /Directory | cut -f1)))'%'
 
@@ -234,6 +234,7 @@ int main(int argc, char *argv[])
  {boost::program_options::options_description desc(std::string("Example:\n  ")+argv[0]+" -c 1 -h SHA3-256 -m 36mcslni --list-found-incompletely --tell-what-to-link --do-deduplicate=0 \n");
   std::vector<boost::filesystem::path> paths;
   bool b;
+  std::string x1;
   bool m[9];
   std::string m0;
   std::string o;
@@ -247,9 +248,10 @@ int main(int argc, char *argv[])
   EVP_MD_do_all(list_available_digest,&MDs);
   std::string h;
   desc.add_options()
-   ("help,?", "1.2.1.1")
+   ("help,?", "1.2.1.2")
    ("path,p",boost::program_options::value<std::vector<boost::filesystem::path> >(&paths)->default_value(std::vector<boost::filesystem::path>(1,"."),"."),"Where to Traversal")
    ("basename,b", boost::program_options::value<bool>(&b)->default_value(true),"Trim prefix path")
+   ("exclude,x",boost::program_options::value<std::string>(&x1)->default_value(""),"Exclude basename match regex")
    ("mask,m", boost::program_options::value<std::string>(&m0)->default_value(""),"Mask Output: (n)ame,(i)node,(m)time,(c)time,(l)inks,(s)ize,crc(3)2,crc(6)4,(h)ashs")
    ("out,o",boost::program_options::value<std::string>(&o)->default_value("-"),"Output")
    ("regular_file_only,f", boost::program_options::value<bool>(&f)->default_value(true),"Exception of non-regular_file")
@@ -292,6 +294,7 @@ int main(int argc, char *argv[])
         x.insert(std::pair<std::string,md>(EVP_MD_name(m),md(m,c)));
        }
      }
+    const boost::regex x2(x1);
     std::map<file_t,std::tuple<nlink_t,hash_t,names_t>> files_map;
     hashs_map_t hashs_map;
     std::set<boost::filesystem::path> paths1;
@@ -304,7 +307,9 @@ int main(int argc, char *argv[])
       else
        {for (boost::filesystem::recursive_directory_iterator i(*p),e; i!=e; i++)
          {assert(0==STATE_F(i->path().c_str(),&s));
-          if(S_ISREG(s.st_mode)) digest(files_map,hashs_map,m,n,i->path(),s,c,x);
+          if(S_ISREG(s.st_mode))
+           {if(x1.empty()||!boost::regex_match(basename(i->path().c_str()),x2)) digest(files_map,hashs_map,m,n,i->path(),s,c,x);
+           }
           else
            {if(S_ISDIR(s.st_mode)){}
             else
